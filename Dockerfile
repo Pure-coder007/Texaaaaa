@@ -27,13 +27,17 @@ RUN apt-get update && apt-get install -y \
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
     docker-php-ext-install -j$(nproc) gd pdo pdo_mysql zip exif pcntl bcmath intl opcache
 
-# Install Composer
+# Install Composer (from official Composer image)
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Set working directory
-WORKDIR /var/www/html
+# Create a non-root user to avoid running as root in the container
+RUN useradd -ms /bin/bash laraveluser
 
-# Copy composer files first
+# Set working directory and switch to laraveluser
+WORKDIR /var/www/html
+USER laraveluser
+
+# Copy composer files first to take advantage of Docker cache
 COPY composer.json composer.lock ./
 
 # Install PHP dependencies
@@ -47,11 +51,12 @@ RUN npm ci --no-audit --prefer-offline && \
     npm run build && \
     rm -rf node_modules
 
-# Set correct permissions
-RUN chown -R www-data:www-data storage bootstrap/cache && \
+# Set correct permissions (storage and cache folders)
+RUN chown -R laraveluser:www-data storage bootstrap/cache && \
     chmod -R 775 storage bootstrap/cache
 
+# Expose port
 EXPOSE 8000
 
-# Start Laravel
+# Start Laravel (clear caches, optimize, then serve)
 CMD ["sh", "-c", "php artisan optimize:clear && php artisan optimize && php artisan serve --host=0.0.0.0 --port=8000"]
