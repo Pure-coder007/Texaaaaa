@@ -1,8 +1,5 @@
 FROM php:8.4-fpm
 
-# Optional: switch to faster mirror (optional - can remove)
-# RUN sed -i 's|http://deb.debian.org/debian|http://mirror.math.princeton.edu/pub/debian|g' /etc/apt/sources.list
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     libpng-dev \
@@ -37,14 +34,14 @@ RUN useradd -ms /bin/bash laraveluser
 WORKDIR /var/www/html
 USER laraveluser
 
-# Copy composer files first to take advantage of Docker cache
+# Copy application code first (this ensures artisan is copied before composer install)
+COPY . .
+
+# Copy composer files (this step is crucial for Composer to cache dependencies)
 COPY composer.json composer.lock ./
 
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
-
-# Copy application code
-COPY . .
 
 # Install JS dependencies and build
 RUN npm ci --no-audit --prefer-offline && \
