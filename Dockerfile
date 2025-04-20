@@ -19,6 +19,11 @@ RUN apt-get update && apt-get install -y \
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) gd pdo pdo_mysql zip exif pcntl bcmath
 
+# Add this right before your composer install command
+RUN apt-get update && apt-get install -y libicu-dev \
+    && docker-php-ext-install intl \
+    && docker-php-ext-enable intl
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
