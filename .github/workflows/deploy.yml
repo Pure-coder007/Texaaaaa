@@ -1,0 +1,48 @@
+name: Deploy Laravel to Hostinger VPS
+
+on:
+  push:
+    branches: [ main ]  # Or whichever branch you're using
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          script: |
+            cd /home/pwanchampion/htdocs/pwanchampion.com
+            git pull origin main
+
+            # Install/update dependencies
+            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+
+            # Environment setup (if needed)
+            # cp .env.example .env
+            # php artisan key:generate
+
+            # Clear caches
+            php artisan optimize:clear
+
+            # Run migrations (add --force to run in production)
+            php artisan migrate --force
+
+            # Restart PHP-FPM (if needed)
+            # sudo systemctl restart php8.1-fpm
+
+            # Clear OPcache (if enabled)
+            # php -r "opcache_reset();"
+
+            # Cache config and routes for better performance
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache

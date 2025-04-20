@@ -1,0 +1,3609 @@
+Main Application Code:
+
+Models:
+
+
+--- app/Models/City.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class City extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'state_id',
+        'name',
+        'status',
+    ];
+
+    /**
+     * State this city belongs to
+     */
+    public function state()
+    {
+        return $this->belongsTo(State::class);
+    }
+
+    /**
+     * Locations that belong to this city
+     */
+    public function locations()
+    {
+        return $this->hasMany(Location::class);
+    }
+
+    /**
+     * Estates in this city
+     */
+    public function estates()
+    {
+        return $this->hasMany(Estate::class);
+    }
+}
+
+--- app/Models/ClientDocument.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+
+class ClientDocument extends Model implements HasMedia
+{
+    use HasFactory, HasUuids, SoftDeletes, InteractsWithMedia;
+
+    protected $fillable = [
+        'client_folder_id',
+        'name',
+        'file_path',
+        'document_type',
+        'status',
+        'is_system_generated',
+        'requires_client_signature',
+        'requires_admin_signature',
+        'client_signed_at',
+        'admin_signed_at',
+        'admin_uploader_id',
+        'admin_signer_id',
+        'version',
+        'metadata',
+        'original_document_id',
+    ];
+
+    protected $casts = [
+        'is_system_generated' => 'boolean',
+        'requires_client_signature' => 'boolean',
+        'requires_admin_signature' => 'boolean',
+        'client_signed_at' => 'datetime',
+        'admin_signed_at' => 'datetime',
+        'metadata' => 'json',
+    ];
+
+    /**
+     * Folder this document belongs to
+     */
+    public function folder()
+    {
+        return $this->belongsTo(ClientFolder::class, 'client_folder_id');
+    }
+
+    /**
+     * Admin who uploaded this document
+     */
+    public function adminUploader()
+    {
+        return $this->belongsTo(User::class, 'admin_uploader_id');
+    }
+
+    /**
+     * Admin who signed this document
+     */
+    public function adminSigner()
+    {
+        return $this->belongsTo(User::class, 'admin_signer_id');
+    }
+
+    /**
+     * Original document this document is based on
+     */
+    public function originalDocument()
+    {
+        return $this->belongsTo(ClientDocument::class, 'original_document_id');
+    }
+
+    /**
+     * Versions of this document
+     */
+    public function versions()
+    {
+        return $this->hasMany(ClientDocument::class, 'original_document_id');
+    }
+
+    /**
+     * Get the client who owns this document
+     */
+    public function client()
+    {
+        return $this->folder->client();
+    }
+
+    /**
+     * Register media collections for the model
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('document_file')
+            ->singleFile();
+
+        $this->addMediaCollection('signed_document')
+            ->singleFile();
+
+        $this->addMediaCollection('signatures')
+            ->useDisk('public');
+    }
+
+    /**
+     * Check if the document is signed by both parties
+     */
+    public function isFullySigned()
+    {
+        $clientSigned = !$this->requires_client_signature || $this->client_signed_at !== null;
+        $adminSigned = !$this->requires_admin_signature || $this->admin_signed_at !== null;
+
+        return $clientSigned && $adminSigned;
+    }
+}
+
+--- app/Models/ClientFolder.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class ClientFolder extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'client_id',
+        'purchase_id',
+        'name',
+        'path',
+        'status',
+        'folder_type',
+        'metadata',
+    ];
+
+    protected $casts = [
+        'metadata' => 'json',
+    ];
+
+    /**
+     * Client who owns this folder
+     */
+    public function client()
+    {
+        return $this->belongsTo(User::class, 'client_id');
+    }
+
+    /**
+     * Purchase related to this folder
+     */
+    public function purchase()
+    {
+        return $this->belongsTo(Purchase::class);
+    }
+
+    /**
+     * Documents in this folder
+     */
+    public function documents()
+    {
+        return $this->hasMany(ClientDocument::class);
+    }
+}
+
+--- app/Models/Country.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Country extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'name',
+        'code',
+        'phone_code',
+        'currency',
+        'currency_symbol',
+        'status',
+    ];
+
+    /**
+     * States that belong to this country
+     */
+    public function states()
+    {
+        return $this->hasMany(State::class);
+    }
+
+}
+
+--- app/Models/Estate.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+
+class Estate extends Model implements HasMedia
+{
+    use HasFactory, HasUuids, SoftDeletes, InteractsWithMedia;
+
+    protected $fillable = [
+        'name',
+        'description',
+        'city_id',
+        'location_id',
+        'address',
+        'total_area',
+        'status',
+        'manager_id',
+        'corner_plot_premium_percentage',
+        'commercial_plot_premium_percentage',
+        'faq',
+        'terms',
+        'refund_policy',
+    ];
+
+    protected $casts = [
+        'total_area' => 'decimal:2',
+        'corner_plot_premium_percentage' => 'decimal:2',
+        'commercial_plot_premium_percentage' => 'decimal:2',
+        'faq' => 'json',
+        'terms' => 'json',
+        'refund_policy' => 'json',
+    ];
+
+    /**
+     * City this estate is located in
+     */
+    public function city()
+    {
+        return $this->belongsTo(City::class);
+    }
+
+    /**
+     * Location of this estate
+     */
+    public function location()
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    /**
+     * Manager of this estate
+     */
+    public function manager()
+    {
+        return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    /**
+     * Plot types defined for this estate
+     */
+    public function plotTypes()
+    {
+        return $this->hasMany(EstatePlotType::class);
+    }
+
+    /**
+     * Plots in this estate
+     */
+    public function plots()
+    {
+        return $this->hasMany(Plot::class);
+    }
+
+    /**
+     * Promotions offered by this estate
+     */
+    public function promos()
+    {
+        return $this->hasMany(Promo::class);
+    }
+
+    /**
+     * Promo codes offered by this estate
+     */
+    public function promoCodes()
+    {
+        return $this->hasMany(PromoCode::class);
+    }
+
+    /**
+     * Inspections hosted at this estate
+     */
+    public function inspections()
+    {
+        return $this->hasMany(Inspection::class);
+    }
+
+    /**
+     * Purchases made for plots in this estate
+     */
+    public function purchases()
+    {
+        return $this->hasMany(Purchase::class);
+    }
+
+    /**
+     * Register media collections for the model
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('estate_images')
+            ->useDisk('public');
+
+        $this->addMediaCollection('featured_image')
+            ->singleFile();
+
+        $this->addMediaCollection('estate_plans')
+            ->useDisk('public');
+
+        $this->addMediaCollection('site_plan')
+            ->singleFile();
+
+        $this->addMediaCollection('documents')
+            ->useDisk('public');
+    }
+}
+
+--- app/Models/EstatePlotType.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class EstatePlotType extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'estate_id',
+        'name',
+        'size_sqm',
+        'outright_price',
+        'six_month_price',
+        'twelve_month_price',
+        'is_active',
+        'plot_count',
+    ];
+
+    protected $casts = [
+        'size_sqm' => 'decimal:2',
+        'outright_price' => 'decimal:2',
+        'six_month_price' => 'decimal:2',
+        'twelve_month_price' => 'decimal:2',
+        'is_active' => 'boolean',
+    ];
+
+    /**
+     * Estate this plot type belongs to
+     */
+    public function estate()
+    {
+        return $this->belongsTo(Estate::class);
+    }
+
+    /**
+     * Plots of this type
+     */
+    public function plots()
+    {
+        return $this->hasMany(Plot::class);
+    }
+
+    /**
+     * Purchase plots of this type
+     */
+    public function purchasePlots()
+    {
+        return $this->hasMany(PurchasePlot::class);
+    }
+}
+
+--- app/Models/Inspection.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\MediaLibrary\HasMedia;
+
+class Inspection extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'estate_id',
+        'plot_id',
+        'client_id',
+        'scheduled_date',
+        'scheduled_time',
+        'status',
+        'notes',
+    ];
+
+    protected $casts = [
+        'scheduled_date' => 'date',
+        'scheduled_time' => 'datetime:H:i',
+    ];
+
+    /**
+     * Estate where the inspection is scheduled
+     */
+    public function estate()
+    {
+        return $this->belongsTo(Estate::class);
+    }
+
+    /**
+     * Plot that is being inspected
+     */
+    public function plot()
+    {
+        return $this->belongsTo(Plot::class);
+    }
+
+    /**
+     * Client scheduling the inspection
+     */
+    public function client()
+    {
+        return $this->belongsTo(User::class, 'client_id');
+    }
+
+}
+
+--- app/Models/Location.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Location extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'city_id',
+        'name',
+        'description',
+        'latitude',
+        'longitude',
+        'address',
+        'postal_code',
+        'status',
+    ];
+
+    protected $casts = [
+        'latitude' => 'decimal:7',
+        'longitude' => 'decimal:7',
+    ];
+
+    /**
+     * City this location belongs to
+     */
+    public function city()
+    {
+        return $this->belongsTo(City::class);
+    }
+
+    /**
+     * Estates situated in this location
+     */
+    public function estates()
+    {
+        return $this->hasMany(Estate::class);
+    }
+
+}
+
+--- app/Models/Payment.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Payment extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'purchase_id',
+        'client_id',
+        'payment_plan_id',
+        'payment_type',
+        'amount',
+        'transaction_id',
+        'payment_method',
+        'status',
+        'payment_details',
+    ];
+
+    protected $casts = [
+        'amount' => 'decimal:2',
+        'payment_details' => 'json',
+    ];
+
+    /**
+     * Purchase this payment belongs to
+     */
+    public function purchase()
+    {
+        return $this->belongsTo(Purchase::class);
+    }
+
+    /**
+     * Client who made the payment
+     */
+    public function client()
+    {
+        return $this->belongsTo(User::class, 'client_id');
+    }
+
+    /**
+     * Payment plan this payment belongs to
+     */
+    public function paymentPlan()
+    {
+        return $this->belongsTo(PaymentPlan::class);
+    }
+
+    /**
+     * Payment proof for this payment
+     */
+    public function paymentProof()
+    {
+        return $this->hasOne(PaymentProof::class);
+    }
+
+}
+
+--- app/Models/PaymentPlan.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class PaymentPlan extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'purchase_id',
+        'client_id',
+        'total_amount',
+        'initial_payment',
+        'duration_months',
+        'status',
+        'premium_percentage',
+        'final_due_date',
+    ];
+
+    protected $casts = [
+        'total_amount' => 'decimal:2',
+        'initial_payment' => 'decimal:2',
+        'duration_months' => 'integer',
+        'premium_percentage' => 'decimal:2',
+        'final_due_date' => 'date',
+    ];
+
+    /**
+     * Purchase this payment plan belongs to
+     */
+    public function purchase()
+    {
+        return $this->belongsTo(Purchase::class);
+    }
+
+    /**
+     * Client this payment plan belongs to
+     */
+    public function client()
+    {
+        return $this->belongsTo(User::class, 'client_id');
+    }
+
+    /**
+     * Payments made under this payment plan
+     */
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Calculate the monthly payment amount
+     */
+    public function monthlyPaymentAmount()
+    {
+        $remainingAmount = $this->total_amount - $this->initial_payment;
+        return $remainingAmount / $this->duration_months;
+    }
+
+    /**
+     * Calculate the total paid amount
+     */
+    public function totalPaid()
+    {
+        return $this->payments()->where('status', 'verified')->sum('amount');
+    }
+
+    /**
+     * Calculate the remaining balance
+     */
+    public function remainingBalance()
+    {
+        return $this->total_amount - $this->totalPaid();
+    }
+}
+
+--- app/Models/PaymentProof.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+
+class PaymentProof extends Model implements HasMedia
+{
+    use HasFactory, HasUuids, SoftDeletes, InteractsWithMedia;
+
+    protected $fillable = [
+        'payment_id',
+        'transaction_reference',
+        'notes',
+        'status',
+    ];
+
+    /**
+     * Payment this proof belongs to
+     */
+    public function payment()
+    {
+        return $this->belongsTo(Payment::class);
+    }
+
+    /**
+     * Register media collections for the model
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('proof_documents')
+            ->useDisk('public');
+    }
+}
+
+--- app/Models/PboLevel.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class PboLevel extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'name',
+        'direct_sale_commission_percentage',
+        'referral_commission_percentage',
+        'minimum_sales_count',
+        'minimum_sales_value',
+        'status',
+    ];
+
+    protected $casts = [
+        'direct_sale_commission_percentage' => 'decimal:2',
+        'referral_commission_percentage' => 'decimal:2',
+        'minimum_sales_count' => 'integer',
+        'minimum_sales_value' => 'decimal:2',
+    ];
+
+    // Relationships
+    public function users()
+    {
+        return $this->hasMany(User::class, 'pbo_level_id');
+    }
+
+}
+
+--- app/Models/PboPoint.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class PboPoint extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'pbo_id',
+        'points',
+        'type',
+        'description',
+    ];
+
+
+    // Relationships
+    public function pbo()
+    {
+        return $this->belongsTo(User::class, 'pbo_id');
+    }
+    // add hidden
+    protected $hidden = ['created_at', 'updated_at'];
+}
+
+
+--- app/Models/PboReferral.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class PboReferral extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'referrer_id',
+        'referred_id',
+        'status',
+        'email',
+        'converted_at',
+        'expires_at',
+    ];
+
+    protected $casts = [
+        'converted_at' => 'datetime',
+        'expires_at' => 'datetime',
+    ];
+
+    // Relationships
+    public function referrer()
+    {
+        return $this->belongsTo(User::class, 'referrer_id');
+    }
+
+    public function referred()
+    {
+        return $this->belongsTo(User::class, 'referred_id');
+    }
+}
+
+--- app/Models/PboSale.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class PboSale extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'purchase_id',
+        'pbo_id',
+        'client_id',
+        'sale_type',
+        'commission_percentage',
+        'commission_amount',
+        'status',
+        'payment_date',
+        'payment_reference',
+    ];
+
+    protected $casts = [
+        'commission_percentage' => 'decimal:2',
+        'commission_amount' => 'decimal:2',
+        'payment_date' => 'date',
+    ];
+
+    // Relationships
+    public function purchase()
+    {
+        return $this->belongsTo(Purchase::class);
+    }
+
+    public function pbo()
+    {
+        return $this->belongsTo(User::class, 'pbo_id');
+    }
+
+    public function client()
+    {
+        return $this->belongsTo(User::class, 'client_id');
+    }
+}
+
+--- app/Models/Plot.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+
+class Plot extends Model implements HasMedia
+{
+    use HasFactory, HasUuids, SoftDeletes, InteractsWithMedia;
+
+    protected $fillable = [
+        'estate_id',
+        'estate_plot_type_id',
+        'area',
+        'dimensions',
+        'price',
+        'status',
+        'is_commercial',
+        'is_corner',
+    ];
+
+    protected $casts = [
+        'area' => 'decimal:2',
+        'price' => 'decimal:2',
+        'is_commercial' => 'boolean',
+        'is_corner' => 'boolean',
+    ];
+
+    /**
+     * Estate this plot belongs to
+     */
+    public function estate()
+    {
+        return $this->belongsTo(Estate::class);
+    }
+
+    /**
+     * Plot type of this plot
+     */
+    public function plotType()
+    {
+        return $this->belongsTo(EstatePlotType::class, 'estate_plot_type_id');
+    }
+
+    /**
+     * Inspections for this plot
+     */
+    public function inspections()
+    {
+        return $this->hasMany(Inspection::class);
+    }
+
+    /**
+     * Purchase plots that include this plot
+     */
+    public function purchasePlots()
+    {
+        return $this->hasMany(PurchasePlot::class);
+    }
+
+    /**
+     * Calculate the current price of the plot including any premiums
+     */
+    public function getCurrentPrice()
+    {
+        $basePrice = $this->price;
+        $estate = $this->estate;
+
+        if ($this->is_corner && $estate) {
+            $basePrice += ($basePrice * $estate->corner_plot_premium_percentage / 100);
+        }
+
+        if ($this->is_commercial && $estate) {
+            $basePrice += ($basePrice * $estate->commercial_plot_premium_percentage / 100);
+        }
+
+        return $basePrice;
+    }
+
+    /**
+     * Register media collections for the model
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('plot_images')
+            ->useDisk('public');
+
+        $this->addMediaCollection('plot_plan')
+            ->singleFile();
+    }
+}
+
+--- app/Models/Promo.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+
+class Promo extends Model implements HasMedia
+{
+    use HasFactory, HasUuids, SoftDeletes, InteractsWithMedia;
+
+    protected $fillable = [
+        'estate_id',
+        'name',
+        'description',
+        'buy_quantity',
+        'free_quantity',
+        'valid_from',
+        'valid_to',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'buy_quantity' => 'integer',
+        'free_quantity' => 'integer',
+        'valid_from' => 'date',
+        'valid_to' => 'date',
+        'is_active' => 'boolean',
+    ];
+
+    /**
+     * Estate this promo belongs to
+     */
+    public function estate()
+    {
+        return $this->belongsTo(Estate::class);
+    }
+
+    /**
+     * Purchases using this promo
+     */
+    public function purchases()
+    {
+        return $this->hasMany(Purchase::class);
+    }
+
+    /**
+     * Check if promo is valid today
+     */
+    public function isValidToday()
+    {
+        $today = now()->startOfDay();
+        return $this->is_active &&
+               $today->gte($this->valid_from) &&
+               $today->lte($this->valid_to);
+    }
+
+    /**
+     * Register media collections for the model
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('promo_images')
+            ->useDisk('public');
+    }
+}
+
+--- app/Models/PromoCode.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class PromoCode extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'estate_id',
+        'code',
+        'discount_type',
+        'discount_amount',
+        'valid_from',
+        'valid_until',
+        'usage_limit',
+        'times_used',
+        'status',
+    ];
+
+    protected $casts = [
+        'discount_amount' => 'decimal:2',
+        'valid_from' => 'date',
+        'valid_until' => 'date',
+        'usage_limit' => 'integer',
+        'times_used' => 'integer',
+    ];
+
+    /**
+     * Estate this promo code belongs to
+     */
+    public function estate()
+    {
+        return $this->belongsTo(Estate::class);
+    }
+
+    /**
+     * Purchases using this promo code
+     */
+    public function purchases()
+    {
+        return $this->hasMany(Purchase::class);
+    }
+
+    /**
+     * Check if promo code is valid today
+     */
+    public function isValidToday()
+    {
+        $today = now()->startOfDay();
+
+        // Check if active, within date range, and usage limit not exceeded
+        return $this->status === 'active' &&
+               $today->gte($this->valid_from) &&
+               $today->lte($this->valid_until) &&
+               ($this->usage_limit === null || $this->times_used < $this->usage_limit);
+    }
+
+    /**
+     * Calculate discount amount for a given price
+     */
+    public function calculateDiscount($price)
+    {
+        if ($this->discount_type === 'percentage') {
+            return $price * ($this->discount_amount / 100);
+        } else { // fixed
+            return min($this->discount_amount, $price); // Can't discount more than the price
+        }
+    }
+}
+
+--- app/Models/Purchase.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Purchase extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'client_id',
+        'pbo_id',
+        'pbo_code',
+        'estate_id',
+        'total_plots',
+        'total_area',
+        'base_price',
+        'premium_amount',
+        'promo_id',
+        'promo_code_id',
+        'free_plots',
+        'payment_plan_type',
+        'total_amount',
+        'status',
+        'purchase_date',
+        'transaction_id',
+        'referral_source'
+    ];
+
+    protected $casts = [
+        'total_plots' => 'integer',
+        'total_area' => 'decimal:2',
+        'base_price' => 'decimal:2',
+        'premium_amount' => 'decimal:2',
+        'free_plots' => 'integer',
+        'total_amount' => 'decimal:2',
+        'purchase_date' => 'date',
+    ];
+
+    /**
+     * Client who made the purchase
+     */
+    public function client()
+    {
+        return $this->belongsTo(User::class, 'client_id');
+    }
+
+    /**
+     * PBO who facilitated the purchase
+     */
+    public function pbo()
+    {
+        return $this->belongsTo(User::class, 'pbo_id');
+    }
+
+    /**
+     * Estate where the purchase was made
+     */
+    public function estate()
+    {
+        return $this->belongsTo(Estate::class);
+    }
+
+    /**
+     * Plots included in this purchase
+     */
+    public function purchasePlots()
+    {
+        return $this->hasMany(PurchasePlot::class);
+    }
+
+    /**
+     * Payment plan for this purchase
+     */
+    public function paymentPlan()
+    {
+        return $this->hasOne(PaymentPlan::class);
+    }
+
+    /**
+     * Payments made for this purchase
+     */
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Commission generated from this purchase
+     */
+    public function pboSale()
+    {
+        return $this->hasOne(PboSale::class);
+    }
+
+    /**
+     * Client folder generated for this purchase
+     */
+    public function clientFolder()
+    {
+        return $this->hasOne(ClientFolder::class);
+    }
+
+    /**
+     * Promo applied to this purchase
+     */
+    public function promo()
+    {
+        return $this->belongsTo(Promo::class);
+    }
+
+    /**
+     * Promo code applied to this purchase
+     */
+    public function promoCode()
+    {
+        return $this->belongsTo(PromoCode::class);
+    }
+
+    /**
+     * Calculate the total amount paid so far
+     */
+    public function totalPaid()
+    {
+        return $this->payments()->where('status', 'verified')->sum('amount');
+    }
+
+    /**
+     * Calculate the remaining balance
+     */
+    public function remainingBalance()
+    {
+        return $this->total_amount - $this->totalPaid();
+    }
+
+    /**
+     * Get all documents related to this purchase through the client folder
+     */
+    public function documents()
+    {
+        return $this->hasManyThrough(
+            ClientDocument::class,
+            ClientFolder::class,
+            'purchase_id', // Foreign key on ClientFolder
+            'client_folder_id', // Foreign key on ClientDocument
+            'id', // Local key on Purchase
+            'id' // Local key on ClientFolder
+        );
+    }
+}
+
+--- app/Models/PurchasePlot.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class PurchasePlot extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'purchase_id',
+        'plot_id',
+        'estate_plot_type_id',
+        'is_commercial',
+        'is_corner',
+        'is_promo_bonus',
+        'unit_price',
+        'total_price',
+    ];
+
+    protected $casts = [
+        'is_commercial' => 'boolean',
+        'is_corner' => 'boolean',
+        'is_promo_bonus' => 'boolean',
+        'unit_price' => 'decimal:2',
+        'total_price' => 'decimal:2',
+    ];
+
+    /**
+     * Purchase this plot belongs to
+     */
+    public function purchase()
+    {
+        return $this->belongsTo(Purchase::class);
+    }
+
+    /**
+     * Plot included in this purchase
+     */
+    public function plot()
+    {
+        return $this->belongsTo(Plot::class);
+    }
+
+    /**
+     * Plot type of this purchase plot
+     */
+    public function plotType()
+    {
+        return $this->belongsTo(EstatePlotType::class, 'estate_plot_type_id');
+    }
+}
+
+--- app/Models/State.php ---
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class State extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'country_id',
+        'name',
+        'code',
+        'status',
+    ];
+
+    /**
+     * Country this state belongs to
+     */
+    public function country()
+    {
+        return $this->belongsTo(Country::class);
+    }
+
+    /**
+     * Cities that belong to this state
+     */
+    public function cities()
+    {
+        return $this->hasMany(City::class);
+    }
+}
+
+--- app/Models/User.php ---
+
+<?php
+
+namespace App\Models;
+
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasAvatar;
+use Filament\Panel;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
+use Jeffgreco13\FilamentBreezy\Traits\TwoFactorAuthenticatable;
+use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+
+class User extends Authenticatable implements FilamentUser, HasAvatar, MustVerifyEmail, HasMedia
+{
+    /** @use HasFactory<\Database\Factories\UserFactory> */
+    use HasFactory, Notifiable, HasRoles, TwoFactorAuthenticatable, HasApiTokens, HasUuids, InteractsWithMedia;
+
+    protected $fillable = [
+        'name',
+        'email',
+        'phone',
+        'password',
+        'role',
+        'admin_role',
+        'status',
+        'pbo_level_id',
+        'custom_direct_commission_percentage',
+        'custom_referral_commission_percentage',
+        'use_custom_commission',
+        'onboarding_completed',
+
+        // Personal Information
+        'spouse_name',
+        'date_of_birth',
+        'gender',
+        'marital_status',
+        'nationality',
+        'languages_spoken',
+
+        // Contact Information
+        'address',
+        'country_of_residence',
+        'mobile_number',
+
+        // Employment Details
+        'occupation',
+        'employer_name',
+
+        // Next of Kin Details
+        'next_of_kin_name',
+        'next_of_kin_relationship',
+        'next_of_kin_address',
+        'next_of_kin_phone',
+        'next_of_kin_email',
+
+        // Terms & Submission
+        'terms_accepted',
+        'submission_date',
+        'registration_completed',
+
+        'pbo_code',
+
+
+        'bank_name',
+        'bank_account_number',
+        'bank_account_name',
+        'bank_branch',
+        'bank_swift_code',
+        'preferred_payment_method',
+        'payment_notes',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+        'languages_spoken' => 'array',
+        'date_of_birth' => 'date',
+        'submission_date' => 'date',
+        'terms_accepted' => 'boolean',
+        'registration_completed' => 'boolean',
+    ];
+
+    protected array $guard_name = ['admin', 'pbo', 'web'];
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'languages_spoken' => 'array',
+            'date_of_birth' => 'date',
+            'submission_date' => 'date',
+            'terms_accepted' => 'boolean',
+            'registration_completed' => 'boolean',
+        ];
+    }
+
+    public function getFilamentAvatarUrl(): ?string
+    {
+        return $this->avatar_url ? Storage::url($this->avatar_url) : null;
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return true;
+    }
+
+    // Media collections
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('avatar_url')
+            ->singleFile();
+    }
+
+    // PBO Level relationship
+    public function pboLevel()
+    {
+        return $this->belongsTo(PboLevel::class);
+    }
+
+    // Estates managed by this user (if admin/manager)
+    public function managedEstates()
+    {
+        return $this->hasMany(Estate::class, 'manager_id');
+    }
+
+    // Purchases made by this user (if client)
+    public function purchases()
+    {
+        return $this->hasMany(Purchase::class, 'client_id');
+    }
+
+    // Referrals made by this user (if PBO)
+    public function referrals()
+    {
+        return $this->hasMany(PboReferral::class, 'referrer_id');
+    }
+
+    // Referral that brought this user
+    public function referredBy()
+    {
+        return $this->belongsTo(User::class, 'referred_by');
+    }
+
+    // Users referred by this user
+    public function referredUsers()
+    {
+        return $this->hasMany(User::class, 'referred_by');
+    }
+
+    // Sales where this user earned commission (if PBO)
+    public function pboSales()
+    {
+        return $this->hasMany(PboSale::class, 'pbo_id');
+    }
+
+    // Inspections scheduled by this user
+    public function inspections()
+    {
+        return $this->hasMany(Inspection::class, 'client_id');
+    }
+
+    // Client folders owned by this user
+    public function clientFolders()
+    {
+        return $this->hasMany(ClientFolder::class, 'client_id');
+    }
+
+    // Payments made by this user (if client)
+    public function payments()
+    {
+        return $this->hasMany(Payment::class, 'client_id');
+    }
+
+     // Referrer relationship
+     public function referrer()
+     {
+         return $this->belongsTo(User::class, 'referred_by');
+     }
+
+
+     // Agent referral records as referrer
+     public function agentReferrals()
+     {
+         return $this->hasMany(PboReferral::class, 'referrer_id');
+     }
+
+     // Total points earned by this agent
+     public function pboPoints()
+     {
+         return $this->hasMany(PboPoint::class, 'pbo_id');
+     }
+
+     // Get total points
+     public function getTotalPointsAttribute()
+     {
+         return $this->pboPoints()->sum('points');
+     }
+
+     // Generate a unique agent code if not already set
+     public function generateAgentCode()
+     {
+         if (!$this->pbo_code) {
+             $code = strtoupper(substr(str_replace(' ', '', $this->name), 0, 2) . rand(1000, 9999));
+
+             // Ensure code is unique
+             while (User::where('pbo_code', $code)->exists()) {
+                 $code = strtoupper(substr(str_replace(' ', '', $this->name), 0, 2) . rand(1000, 9999));
+             }
+
+             $this->update(['pbo_code' => $code]);
+         }
+
+         return $this->pbo_code;
+     }
+
+     // Get the referral URL for this agent
+     public function getReferralUrlAttribute()
+     {
+         if (!$this->pbo_code) {
+             $this->generateAgentCode();
+         }
+
+         return route('filament.agent.auth.register', ['ref' => $this->pbo_code]);
+     }
+
+     // Add points to this agent
+     public function addPoints(int $points, string $type, ?string $description = null)
+     {
+         return $this->pboPoints()->create([
+             'points' => $points,
+             'type' => $type,
+             'description' => $description,
+         ]);
+     }
+
+     public function hasBankDetails(): bool
+     {
+         return !empty($this->bank_name) && !empty($this->bank_account_number) && !empty($this->bank_account_name);
+     }
+
+}
+
+Migrations:
+
+
+--- database/migrations/0001_01_01_000000_create_users_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->string('phone')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->enum('role', ['client', 'pbo', 'admin'])->default('client');
+            $table->enum('admin_role', ['estate_manager', 'finance', 'super_admin'])->nullable();
+            $table->string('status')->default('active');
+            $table->boolean('onboarding_completed')->default(false);
+
+
+            // Personal Information
+            $table->string('spouse_name')->nullable();
+            $table->date('date_of_birth')->nullable();
+            $table->enum('gender', ['male', 'female', 'other'])->nullable();
+            $table->enum('marital_status', ['single', 'married', 'divorced', 'widowed'])->nullable();
+            $table->string('nationality')->nullable();
+            $table->json('languages_spoken')->nullable();
+
+            // Contact Information
+            $table->text('address')->nullable();
+            $table->string('country_of_residence')->nullable();
+            $table->string('mobile_number')->nullable(); // Already have phone, this is additional
+
+            // Employment Details
+            $table->string('occupation')->nullable();
+            $table->string('employer_name')->nullable();
+
+            // Next of Kin Details
+            $table->string('next_of_kin_name')->nullable();
+            $table->string('next_of_kin_relationship')->nullable();
+            $table->text('next_of_kin_address')->nullable();
+            $table->string('next_of_kin_phone')->nullable();
+
+            // Terms & Submission
+            $table->boolean('terms_accepted')->default(false);
+            $table->date('submission_date')->nullable();
+
+            // Registration completion tracking
+            $table->boolean('registration_completed')->default(false);
+
+            $table->string('pbo_code')->nullable()->unique();
+            $table->foreignUuid('referred_by')->nullable();
+
+            $table->string('bank_name')->nullable();
+            $table->string('bank_account_number')->nullable();
+            $table->string('bank_account_name')->nullable();
+            $table->string('bank_branch')->nullable();
+            $table->string('bank_swift_code')->nullable();
+            $table->string('preferred_payment_method')->nullable();
+            $table->text('payment_notes')->nullable();
+
+            $table->rememberToken();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+
+
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('users');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('sessions');
+    }
+};
+
+
+--- database/migrations/0001_01_01_000001_create_cache_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('cache', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->mediumText('value');
+            $table->integer('expiration');
+        });
+
+        Schema::create('cache_locks', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->string('owner');
+            $table->integer('expiration');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('cache');
+        Schema::dropIfExists('cache_locks');
+    }
+};
+
+
+--- database/migrations/0001_01_01_000002_create_jobs_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('queue')->index();
+            $table->longText('payload');
+            $table->unsignedTinyInteger('attempts');
+            $table->unsignedInteger('reserved_at')->nullable();
+            $table->unsignedInteger('available_at');
+            $table->unsignedInteger('created_at');
+        });
+
+        Schema::create('job_batches', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->string('name');
+            $table->integer('total_jobs');
+            $table->integer('pending_jobs');
+            $table->integer('failed_jobs');
+            $table->longText('failed_job_ids');
+            $table->mediumText('options')->nullable();
+            $table->integer('cancelled_at')->nullable();
+            $table->integer('created_at');
+            $table->integer('finished_at')->nullable();
+        });
+
+        Schema::create('failed_jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('uuid')->unique();
+            $table->text('connection');
+            $table->text('queue');
+            $table->longText('payload');
+            $table->longText('exception');
+            $table->timestamp('failed_at')->useCurrent();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('jobs');
+        Schema::dropIfExists('job_batches');
+        Schema::dropIfExists('failed_jobs');
+    }
+};
+
+
+--- database/migrations/2022_12_14_083707_create_settings_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('settings', function (Blueprint $table): void {
+            $table->id();
+
+            $table->string('group');
+            $table->string('name');
+            $table->boolean('locked')->default(false);
+            $table->json('payload');
+
+            $table->timestamps();
+
+            $table->unique(['group', 'name']);
+        });
+    }
+};
+
+
+--- database/migrations/2024_12_04_025120_create_media_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('media', function (Blueprint $table) {
+            $table->id();
+
+            $table->uuidMorphs('model');
+            $table->uuid()->nullable()->unique();
+            $table->string('collection_name');
+            $table->string('name');
+            $table->string('file_name');
+            $table->string('mime_type')->nullable();
+            $table->string('disk');
+            $table->string('conversions_disk')->nullable();
+            $table->unsignedBigInteger('size');
+            $table->json('manipulations');
+            $table->json('custom_properties');
+            $table->json('generated_conversions');
+            $table->json('responsive_images');
+            $table->unsignedInteger('order_column')->nullable()->index();
+
+            $table->nullableTimestamps();
+        });
+    }
+};
+
+
+--- database/migrations/2024_12_04_041953_create_breezy_sessions_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('breezy_sessions', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('authenticatable');
+            $table->string('panel_id')->nullable();
+            $table->string('guard')->nullable();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->text('two_factor_secret')->nullable();
+            $table->text('two_factor_recovery_codes')->nullable();
+            $table->timestamp('two_factor_confirmed_at')->nullable();
+            $table->timestamps();
+        });
+
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('breezy_sessions');
+    }
+};
+
+
+--- database/migrations/2025_01_02_064819_create_permission_tables.php ---
+
+<?php
+
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        $teams = config('permission.teams');
+        $tableNames = config('permission.table_names');
+        $columnNames = config('permission.column_names');
+        $pivotRole = $columnNames['role_pivot_key'] ?? 'role_id';
+        $pivotPermission = $columnNames['permission_pivot_key'] ?? 'permission_id';
+
+        if (empty($tableNames)) {
+            throw new \Exception('Error: config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+        }
+        if ($teams && empty($columnNames['team_foreign_key'] ?? null)) {
+            throw new \Exception('Error: team_foreign_key on config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+        }
+
+        Schema::create($tableNames['permissions'], function (Blueprint $table) {
+            //$table->engine('InnoDB');
+            $table->bigIncrements('id'); // permission id
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+
+            $table->unique(['name', 'guard_name']);
+        });
+
+        Schema::create($tableNames['roles'], function (Blueprint $table) use ($teams, $columnNames) {
+            //$table->engine('InnoDB');
+            $table->bigIncrements('id'); // role id
+            if ($teams || config('permission.testing')) { // permission.testing is a fix for sqlite testing
+                $table->unsignedBigInteger($columnNames['team_foreign_key'])->nullable();
+                $table->index($columnNames['team_foreign_key'], 'roles_team_foreign_key_index');
+            }
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+            if ($teams || config('permission.testing')) {
+                $table->unique([$columnNames['team_foreign_key'], 'name', 'guard_name']);
+            } else {
+                $table->unique(['name', 'guard_name']);
+            }
+        });
+
+        Schema::create($tableNames['model_has_permissions'], function (Blueprint $table) use ($tableNames, $columnNames, $pivotPermission, $teams) {
+            $table->unsignedBigInteger($pivotPermission);
+
+            $table->string('model_type');
+            // Changed from unsignedBigInteger to string(36) for UUID support
+            $table->string($columnNames['model_morph_key'], 36);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_permissions_model_id_model_type_index');
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_permissions_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            } else {
+                $table->primary([$pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            }
+
+        });
+
+        Schema::create($tableNames['model_has_roles'], function (Blueprint $table) use ($tableNames, $columnNames, $pivotRole, $teams) {
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->string('model_type');
+            // Changed from unsignedBigInteger to string(36) for UUID support
+            $table->string($columnNames['model_morph_key'], 36);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_roles_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            } else {
+                $table->primary([$pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            }
+        });
+
+        Schema::create($tableNames['role_has_permissions'], function (Blueprint $table) use ($tableNames, $pivotRole, $pivotPermission) {
+            $table->unsignedBigInteger($pivotPermission);
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+
+            $table->primary([$pivotPermission, $pivotRole], 'role_has_permissions_permission_id_role_id_primary');
+        });
+
+        app('cache')
+            ->store(config('permission.cache.store') != 'default' ? config('permission.cache.store') : null)
+            ->forget(config('permission.cache.key'));
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        $tableNames = config('permission.table_names');
+
+        if (empty($tableNames)) {
+            throw new \Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
+        }
+
+        Schema::drop($tableNames['role_has_permissions']);
+        Schema::drop($tableNames['model_has_roles']);
+        Schema::drop($tableNames['model_has_permissions']);
+        Schema::drop($tableNames['roles']);
+        Schema::drop($tableNames['permissions']);
+    }
+};
+
+
+--- database/migrations/2025_01_02_225927_add_avatar_url_column_to_users_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('avatar_url')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('avatar_url');
+        });
+    }
+};
+
+
+--- database/migrations/2025_01_03_114929_create_personal_access_tokens_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('tokenable');
+            $table->string('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('personal_access_tokens');
+    }
+};
+
+
+--- database/migrations/2025_01_08_233142_create_socialite_users_table.php ---
+
+<?php
+
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+
+return new class extends Migration {
+    public function up()
+    {
+        Schema::create('socialite_users', function (Blueprint $table) {
+            $table->id();
+
+            $table->foreignId('user_id');
+            $table->string('provider');
+            $table->string('provider_id');
+
+            $table->timestamps();
+
+            $table->unique([
+                'provider',
+                'provider_id',
+            ]);
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('socialite_users');
+    }
+};
+
+
+--- database/migrations/2025_01_09_225908_update_user_table_make_password_column_nullable.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        //alter table user
+        Schema::table('users', function (Blueprint $table) {
+            //change password column to nullable
+            $table->string('password')->nullable(true)->change();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            //opposite of up
+            $table->string('password')->nullable(false)->change();
+        });
+    }
+};
+
+
+--- database/migrations/2025_01_12_031340_create_notifications_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('notifications', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('type');
+            $table->uuidMorphs('notifiable');
+            $table->json('data');
+            $table->timestamp('read_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('notifications');
+    }
+};
+
+
+--- database/migrations/2025_01_12_031357_create_imports_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('imports', function (Blueprint $table) {
+            $table->id();
+            $table->timestamp('completed_at')->nullable();
+            $table->string('file_name');
+            $table->string('file_path');
+            $table->string('importer');
+            $table->unsignedInteger('processed_rows')->default(0);
+            $table->unsignedInteger('total_rows');
+            $table->unsignedInteger('successful_rows')->default(0);
+            $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('imports');
+    }
+};
+
+
+--- database/migrations/2025_01_12_031358_create_exports_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('exports', function (Blueprint $table) {
+            $table->id();
+            $table->timestamp('completed_at')->nullable();
+            $table->string('file_disk');
+            $table->string('file_name')->nullable();
+            $table->string('exporter');
+            $table->unsignedInteger('processed_rows')->default(0);
+            $table->unsignedInteger('total_rows');
+            $table->unsignedInteger('successful_rows')->default(0);
+            $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('exports');
+    }
+};
+
+
+--- database/migrations/2025_01_12_031359_create_failed_import_rows_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('failed_import_rows', function (Blueprint $table) {
+            $table->id();
+            $table->json('data');
+            $table->foreignId('import_id')->constrained()->cascadeOnDelete();
+            $table->text('validation_error')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('failed_import_rows');
+    }
+};
+
+
+--- database/migrations/2025_01_31_020024_add_themes_settings_to_users_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class() extends Migration
+{
+    public function up()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('theme')->nullable()->default('default');
+            $table->string('theme_color')->nullable();
+        });
+    }
+
+    public function down()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn(['theme', 'theme_color']);
+        });
+    }
+};
+
+
+--- database/migrations/2025_03_25_195500_create_countries_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('countries', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('code');
+            $table->string('phone_code')->nullable();
+            $table->string('currency')->nullable();
+            $table->string('currency_symbol')->nullable();
+            $table->string('status')->default('active');
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('countries');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195505_create_states_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('states', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('country_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->string('code')->nullable();
+            $table->string('status')->default('active');
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('states');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195511_create_cities_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('cities', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('state_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->string('status')->default('active');
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('cities');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195516_create_locations_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('locations', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('city_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->decimal('latitude', 10, 7)->nullable();
+            $table->decimal('longitude', 10, 7)->nullable();
+            $table->string('address')->nullable();
+            $table->string('postal_code')->nullable();
+            $table->string('status')->default('active');
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('locations');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195829_create_pbo_levels_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('pbo_levels', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->decimal('direct_sale_commission_percentage', 8, 2);
+            $table->decimal('referral_commission_percentage', 8, 2);
+            $table->integer('minimum_sales_count');
+            $table->decimal('minimum_sales_value', 12, 2);
+            $table->string('status')->default('active');
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('pbo_levels');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195838_create_pbo_referrals_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('pbo_referrals', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('referrer_id')->constrained('users')->onDelete('cascade');
+            $table->foreignUuid('referred_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->string('status')->default('pending'); // pending, converted, expired
+            $table->string('email');
+            $table->dateTime('converted_at')->nullable();
+            $table->dateTime('expires_at')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('pbo_referrals');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195855_create_estates_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('estates', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->foreignUuid('city_id')->constrained()->onDelete('restrict');
+            $table->foreignUuid('location_id')->constrained()->onDelete('restrict');
+            $table->text('address')->nullable();
+            $table->decimal('total_area', 12, 2)->nullable();
+            $table->string('status')->default('active');
+            $table->foreignUuid('manager_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->decimal('corner_plot_premium_percentage', 5, 2)->default(0);
+            $table->decimal('commercial_plot_premium_percentage', 5, 2)->default(0);
+            $table->json('faq')->nullable();
+            $table->json('terms')->nullable();
+            $table->json('refund_policy')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('estates');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195901_create_estate_plot_types_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('estate_plot_types', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('estate_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->decimal('size_sqm', 10, 2);
+            $table->decimal('outright_price', 12, 2);
+            $table->decimal('six_month_price', 12, 2);
+            $table->decimal('twelve_month_price', 12, 2);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('estate_plot_types');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195906_create_plots_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('plots', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('estate_id')->constrained()->onDelete('cascade');
+            $table->foreignUuid('estate_plot_type_id')->constrained()->onDelete('restrict');
+            $table->decimal('area', 10, 2);
+            $table->string('dimensions')->nullable();
+            $table->decimal('price', 12, 2);
+            $table->string('status')->default('available'); // available, reserved, sold
+            $table->boolean('is_commercial')->default(false);
+            $table->boolean('is_corner')->default(false);
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('plots');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195912_create_promos_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('promos', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('estate_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->integer('buy_quantity');
+            $table->integer('free_quantity');
+            $table->date('valid_from');
+            $table->date('valid_to');
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('promos');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195917_create_promo_codes_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('promo_codes', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('estate_id')->constrained()->onDelete('cascade');
+            $table->string('code')->unique();
+            $table->string('discount_type'); // percentage, fixed
+            $table->decimal('discount_amount', 12, 2);
+            $table->date('valid_from');
+            $table->date('valid_until');
+            $table->integer('usage_limit')->nullable();
+            $table->integer('times_used')->default(0);
+            $table->string('status')->default('active'); // active, inactive, expired
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('promo_codes');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195923_create_purchases_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('purchases', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('client_id')->constrained('users')->onDelete('cascade');
+            $table->foreignUuid('pbo_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->string('pbo_code')->nullable();
+            $table->foreignUuid('estate_id')->constrained()->onDelete('restrict');
+            $table->integer('total_plots');
+            $table->decimal('total_area', 12, 2);
+            $table->decimal('base_price', 12, 2);
+            $table->decimal('premium_amount', 12, 2)->default(0);
+            $table->foreignUuid('promo_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignUuid('promo_code_id')->nullable()->constrained()->onDelete('set null');
+            $table->integer('free_plots')->default(0);
+            $table->string('payment_plan_type'); // outright, 6_months, 12_months
+            $table->decimal('total_amount', 12, 2);
+            $table->string('status')->default('pending'); // pending, completed, cancelled
+            $table->date('purchase_date');
+            $table->string('transaction_id')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('purchases');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195924_create_pbo_sales_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('pbo_sales', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('purchase_id')->constrained('purchases')->onDelete('cascade');
+            $table->foreignUuid('pbo_id')->constrained('users')->onDelete('cascade');
+            $table->foreignUuid('client_id')->constrained('users')->onDelete('cascade');
+            $table->string('sale_type'); // direct, referral
+            $table->decimal('commission_percentage', 8, 2);
+            $table->decimal('commission_amount', 12, 2);
+            $table->string('status')->default('pending'); // pending, approved, paid
+            $table->date('payment_date')->nullable();
+            $table->string('payment_reference')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('pbo_sales');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195929_create_purchase_plots_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('purchase_plots', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('purchase_id')->constrained()->onDelete('cascade');
+            $table->foreignUuid('plot_id')->constrained()->onDelete('restrict');
+            $table->foreignUuid('estate_plot_type_id')->constrained()->onDelete('restrict');
+            $table->boolean('is_commercial')->default(false);
+            $table->boolean('is_corner')->default(false);
+            $table->boolean('is_promo_bonus')->default(false);
+            $table->decimal('unit_price', 12, 2);
+            $table->decimal('total_price', 12, 2);
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('purchase_plots');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195934_create_payment_plans_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('payment_plans', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('purchase_id')->constrained()->onDelete('cascade');
+            $table->foreignUuid('client_id')->constrained('users')->onDelete('cascade');
+            $table->decimal('total_amount', 12, 2);
+            $table->decimal('initial_payment', 12, 2);
+            $table->integer('duration_months');
+            $table->string('status')->default('active'); // active, completed, defaulted
+            $table->decimal('premium_percentage', 5, 2)->default(0);
+            $table->date('final_due_date');
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('payment_plans');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195938_create_payments_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('payments', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('purchase_id')->constrained()->onDelete('cascade');
+            $table->foreignUuid('client_id')->constrained('users')->onDelete('cascade');
+            $table->foreignUuid('payment_plan_id')->nullable()->constrained()->onDelete('set null');
+            $table->string('payment_type'); // outright, installment
+            $table->decimal('amount', 12, 2);
+            $table->string('transaction_id')->nullable();
+            $table->string('payment_method')->nullable();
+            $table->string('status')->default('pending'); // pending, verified, failed
+            $table->json('payment_details')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('payments');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195944_create_payment_proofs_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('payment_proofs', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('payment_id')->constrained()->onDelete('cascade');
+            $table->string('transaction_reference')->nullable();
+            $table->text('notes')->nullable();
+            $table->string('status')->default('pending'); // pending, verified, rejected
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('payment_proofs');
+    }
+};
+
+
+--- database/migrations/2025_03_25_195955_create_client_folders_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('client_folders', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('client_id')->constrained('users')->onDelete('cascade');
+            $table->foreignUuid('purchase_id')->nullable()->constrained()->onDelete('set null');
+            $table->string('name');
+            $table->string('path')->nullable();
+            $table->string('status')->default('active');
+            $table->string('folder_type'); // purchase, subscription, etc.
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('client_folders');
+    }
+};
+
+
+--- database/migrations/2025_03_25_200000_create_client_documents_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('client_documents', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('client_folder_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->string('file_path')->nullable();
+            $table->string('document_type'); // receipt, contract, allocation, etc.
+            $table->string('status')->default('pending'); // pending, client_signed, admin_signed, completed
+            $table->boolean('is_system_generated')->default(false);
+            $table->boolean('requires_client_signature')->default(false);
+            $table->boolean('requires_admin_signature')->default(false);
+            $table->dateTime('client_signed_at')->nullable();
+            $table->dateTime('admin_signed_at')->nullable();
+            $table->foreignUuid('admin_uploader_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignUuid('admin_signer_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->string('version')->default('1.0');
+            $table->json('metadata')->nullable();
+            $table->foreignUuid('original_document_id')->nullable()->constrained('client_documents')->onDelete('set null');
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('client_documents');
+    }
+};
+
+
+--- database/migrations/2025_03_25_200007_create_inspections_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('inspections', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('estate_id')->constrained()->onDelete('cascade');
+            $table->foreignUuid('plot_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignUuid('client_id')->constrained('users')->onDelete('cascade');
+            $table->date('scheduled_date');
+            $table->time('scheduled_time');
+            $table->string('status')->default('pending'); // pending, completed, canceled
+            $table->text('notes')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->uuid('created_by')->nullable();
+            $table->uuid('updated_by')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('inspections');
+    }
+};
+
+
+--- database/migrations/2025_03_25_200008_add_agent_level_to_users_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->foreignUuid('pbo_level_id')->nullable()->constrained('pbo_levels')->nullOnDelete();
+            $table->decimal('custom_direct_commission_percentage', 5, 2)->nullable();
+            $table->decimal('custom_referral_commission_percentage', 5, 2)->nullable();
+            $table->boolean('use_custom_commission')->default(false);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropForeign(['pbo_level_id']);
+            $table->dropColumn('pbo_level_id');
+            $table->dropColumn('custom_direct_commission_percentage');
+            $table->dropColumn('custom_referral_commission_percentage');
+            $table->dropColumn('use_custom_commission');
+        });
+    }
+};
+
+
+--- database/migrations/2025_03_27_012746_create_pbo_points_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('pbo_points', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('pbo_id')->constrained('users')->cascadeOnDelete();
+            $table->integer('points');
+            $table->string('type'); // 'referral', 'sale', etc.
+            $table->text('description')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('pbo_points');
+    }
+};
+
+
+--- database/migrations/2025_04_01_021256_add_next_of_kin_email_to_users_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('next_of_kin_email')->nullable()->after('next_of_kin_phone');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            //
+        });
+    }
+};
+
+
+--- database/migrations/2025_04_01_021729_add_date_of_birth_to_pbo_registration.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('pbo_registration', function (Blueprint $table) {
+            // Check if the column doesn't exist before adding it
+            if (!Schema::hasColumn('users', 'date_of_birth')) {
+                $table->date('date_of_birth')->nullable()->after('spouse_name');
+            }
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('pbo_registration', function (Blueprint $table) {
+            //
+        });
+    }
+};
+
+
+--- database/migrations/2025_04_01_023330_add_estate_plot_types_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('estate_plot_types', function (Blueprint $table) {
+            $table->integer('plot_count')->default(0)->after('is_active');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('estate_plot_types', function (Blueprint $table) {
+            //
+        });
+    }
+};
+
+
+--- database/migrations/2025_04_01_023330_add_referral_source_to_purchases_table.php ---
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('purchases', function (Blueprint $table) {
+            $table->string('referral_source')->nullable()->after('transaction_id')
+            ->comment('How the customer heard about us');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('purchases', function (Blueprint $table) {
+            //
+        });
+    }
+};
+
+Migrations:
+
+
+--- database/settings/2025_01_08_152510_create_kaido_settings.php ---
+
+<?php
+
+use Spatie\LaravelSettings\Migrations\SettingsMigration;
+
+return new class extends SettingsMigration
+{
+    public function up(): void
+    {
+        $this->migrator->add('KaidoSetting.site_name', 'Spatie');
+        $this->migrator->add('KaidoSetting.site_active', true);
+        $this->migrator->add('KaidoSetting.registration_enabled', true);
+        $this->migrator->add('KaidoSetting.login_enabled', true);
+        $this->migrator->add('KaidoSetting.password_reset_enabled', true);
+        $this->migrator->add('KaidoSetting.sso_enabled', true);
+    }
+};
+
+
+--- database/settings/2025_01_08_152510_create_system_settings.php ---
+
+<?php
+
+use Spatie\LaravelSettings\Migrations\SettingsMigration;
+
+return new class extends SettingsMigration
+{
+    public function up(): void
+    {
+        $this->migrator->add('system.site_name', 'Pwan Champion');
+
+        $this->migrator->add('system.company_name', 'PWAN Champion Realtors and Estates Limited');
+        $this->migrator->add('system.website', 'www.pwanchampion.com');
+
+        // Payment options
+        $this->migrator->add('system.enable_bank_transfer', false);
+        $this->migrator->add('system.enable_cash_payment', false);
+
+        // Bank account settings - First bank
+        $this->migrator->add('system.bank_name_1', 'First Bank Nigeria');
+        $this->migrator->add('system.bank_account_number_1', '1234567890');
+        $this->migrator->add('system.bank_account_name_1', 'EstateHub Properties Ltd');
+
+        // Bank account settings - Second bank
+        $this->migrator->add('system.bank_name_2', 'Zenith Bank');
+        $this->migrator->add('system.bank_account_number_2', '0987654321');
+        $this->migrator->add('system.bank_account_name_2', 'EstateHub Properties Ltd');
+
+        // Bank account settings - Third bank
+        $this->migrator->add('system.bank_name_3', 'UBA');
+        $this->migrator->add('system.bank_account_number_3', '5555555555');
+        $this->migrator->add('system.bank_account_name_3', 'EstateHub Properties Ltd');
+
+        // Tax settings
+        $this->migrator->add('system.enable_tax', false);
+        $this->migrator->add('system.tax_percentage', 0.0);
+        $this->migrator->add('system.tax_name', '');
+        $this->migrator->add('system.tax_display', false);
+
+        // Platform processing fee settings
+        $this->migrator->add('system.enable_processing_fee', false);
+        $this->migrator->add('system.processing_fee_type', 'percentage');
+        $this->migrator->add('system.processing_fee_value', 0.0);
+        $this->migrator->add('system.processing_fee_name', '');
+        $this->migrator->add('system.processing_fee_display', false);
+        $this->migrator->add('system.min_processing_fee', 0);
+        $this->migrator->add('system.max_processing_fee', 0);
+
+        // Site Information - Header
+        $this->migrator->add('system.header_phone', '09076126725');
+        $this->migrator->add('system.header_email', 'pwanchampion@gmail.com');
+        $this->migrator->add('system.show_register_button', true);
+
+         // Bank transfer instructions
+         $this->migrator->add('system.bank_transfer_instructions', 'After making the transfer, please upload your payment proof. Include your transaction reference in the transfer narration.');
+
+         // Cash payment settings
+         $this->migrator->add('system.cash_payment_instructions', 'Visit our office to make a cash payment. After payment, you\'ll receive a receipt which you can upload through your dashboard.');
+         $this->migrator->add('system.cash_payment_office_address', '123 Main Street, City, Country');
+         $this->migrator->add('system.cash_payment_office_hours', 'Monday to Friday, 9:00 AM - 5:00 PM');
+
+
+         $this->migrator->add('system.installment_initial_payment_percentage', 20.0); // Default 20%
+         $this->migrator->add('system.installment_default_penalty_percentage', 10.0);
+
+
+         // Document Settings
+        $this->migrator->add('system.document_company_name', 'PWAN CHAMPION REALTORS AND ESTATE LIMITED');
+        $this->migrator->add('system.document_company_address', 'No 10B Muritala Eletu Street Beside Mayhill Hotel, Jakande Bus Stop Osapa London Lekki Phase 2 Lagos.');
+        $this->migrator->add('system.document_company_phone', '09076126725');
+        $this->migrator->add('system.document_company_whatsapp', '09076126725');
+        $this->migrator->add('system.document_company_email', 'pwanchampion@gmail.com');
+        $this->migrator->add('system.document_company_website', 'www.pwanchampion.com');
+        $this->migrator->add('system.document_company_slogan', '...land is wealth');
+
+        // Receipt Settings
+        $this->migrator->add('system.receipt_title', 'Sales Receipt');
+        $this->migrator->add('system.receipt_file_prefix', 'PWC/ECE/');
+        $this->migrator->add('system.receipt_signatory_name', 'AMB. DR. BENEDICT ABUDU IBHADON');
+        $this->migrator->add('system.receipt_signatory_title', 'Managing Director');
+        $this->migrator->add('system.receipt_company_name_short', 'PWAN CHAMPION');
+        $this->migrator->add('system.receipt_company_description', 'REALTORS AND ESTATE LIMITED');
+
+        // Allocation Letter Settings
+        $this->migrator->add('system.allocation_letter_title', 'PHYSICAL ALLOCATION NOTIFICATION');
+        $this->migrator->add('system.allocation_note', 'This letter is temporary pending the receipt of your survey plan.');
+        $this->migrator->add('system.allocation_footer_text', 'Subsequently, you are responsible for the clearing of your land after allocation.');
+
+        // Contract Settings
+        $this->migrator->add('system.contract_title', 'CONTRACT OF SALE');
+        $this->migrator->add('system.contract_prepared_by', "EMMANUEL NDUBISI, ESQ.\nC/O THE LAW FIRM OF OLUKAYODE A. AKOMOLAFE\n2, OLUFUNMILOLA OKIKIOLU STREET,\nOFF TOYIN STREET,\nIKEJA,\nLAGOS.");
+        $this->migrator->add('system.contract_vendor_description', 'is a Limited Liability Company incorporated under the Laws of the Federal Republic of Nigeria with its office at 10B Muritala Eletu Street Beside Mayhill Hotel Jakande Bus stop, Osapa London, Lekki Pennisula Phase 2, Lagos State (hereinafter referred to as \'THE VENDOR\' which expression shall wherever the context so admits include its assigns, legal representatives and successors-in-title) of the one part.');
+
+        $this->migrator->add('system.document_footer_text', '...land is wealth');
+
+    }
+};
