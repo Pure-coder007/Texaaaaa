@@ -30,11 +30,11 @@ COPY composer.json composer.lock ./
 # Copy the rest of the application code
 COPY . .
 
-# Create necessary folders and set permissions
-RUN mkdir -p storage/logs bootstrap/cache && \
+# Create necessary folders and set permissions as root
+RUN mkdir -p storage/logs bootstrap/cache public/js/filament/forms/components && \
     touch storage/logs/laravel.log && \
-    chown -R laraveluser:www-data storage bootstrap/cache storage/logs/laravel.log && \
-    chmod -R 775 storage bootstrap/cache && \
+    chown -R laraveluser:www-data storage bootstrap/cache public storage/logs/laravel.log && \
+    chmod -R 775 storage bootstrap/cache public && \
     chmod 664 storage/logs/laravel.log
 
 # Switch to non-root user
