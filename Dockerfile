@@ -1,3 +1,8 @@
+# Backup existing Dockerfile (optional, but recommended)
+cp Dockerfile Dockerfile.bak
+
+# Write the new Dockerfile
+cat << 'EOF' > Dockerfile
 # Use PHP 8.4 with FPM
 FROM php:8.4-fpm
 
@@ -30,15 +35,19 @@ COPY composer.json composer.lock ./
 # Copy the rest of the application code
 COPY . .
 
-# Create necessary folders and set permissions as root
-RUN mkdir -p storage/logs bootstrap/cache public/js/filament/forms/components && \
+# Fix ownership and permissions as root
+RUN chown -R laraveluser:www-data /var/www/html && \
+    chmod -R 775 /var/www/html && \
+    mkdir -p storage/logs bootstrap/cache public/js/filament/forms/components && \
     touch storage/logs/laravel.log && \
     chown -R laraveluser:www-data storage bootstrap/cache public storage/logs/laravel.log && \
     chmod -R 775 storage bootstrap/cache public && \
     chmod 664 storage/logs/laravel.log && \
     # Explicitly set permissions for Filament directory
     chown -R laraveluser:www-data public/js/filament && \
-    chmod -R 775 public/js/filament
+    chmod -R 775 public/js/filament && \
+    # Mark repository as safe for Git
+    git config --global --add safe.directory /var/www/html
 
 # Switch to non-root user
 USER laraveluser
@@ -68,3 +77,4 @@ EXPOSE 8000
 
 # Default command to run Laravel app
 CMD ["./start.sh"]
+EOF
