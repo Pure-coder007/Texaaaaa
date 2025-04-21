@@ -44,6 +44,10 @@ RUN chown -R laraveluser:www-data /var/www/html && \
     # Mark repository as safe for Git
     git config --global --add safe.directory /var/www/html
 
+# Copy and make startup script executable as root
+COPY start.sh /var/www/html/start.sh
+RUN chmod +x /var/www/html/start.sh
+
 # Switch to non-root user
 USER laraveluser
 
@@ -58,17 +62,13 @@ RUN npm ci --no-audit --prefer-offline && \
 # Laravel optimization
 RUN php artisan config:clear && \
     php artisan cache:clear && \
-    php artisan clear-cached-components && \  
+    php artisan filament:clear-cached-components && \
     php artisan config:cache && \
     php artisan route:cache && \
     php artisan view:cache
-
-# Copy and make startup script executable
-COPY start.sh .
-RUN chmod +x start.sh
 
 # Expose the Laravel port (Render will map this automatically)
 EXPOSE 8000
 
 # Default command to run Laravel app
-CMD ["./start.sh"] 
+CMD ["./start.sh"]
