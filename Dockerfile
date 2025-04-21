@@ -1,8 +1,3 @@
-# Backup existing Dockerfile (optional, but recommended)
-cp Dockerfile Dockerfile.bak
-
-# Write the new Dockerfile
-cat << 'EOF' > Dockerfile
 # Use PHP 8.4 with FPM
 FROM php:8.4-fpm
 
@@ -63,7 +58,7 @@ RUN npm ci --no-audit --prefer-offline && \
 # Laravel optimization
 RUN php artisan config:clear && \
     php artisan cache:clear && \
-    php artisan filament:cache-clear && \
+    php artisan clear-cached-components && \  
     php artisan config:cache && \
     php artisan route:cache && \
     php artisan view:cache
@@ -76,5 +71,4 @@ RUN chmod +x start.sh
 EXPOSE 8000
 
 # Default command to run Laravel app
-CMD ["./start.sh"]
-EOF
+CMD ["./start.sh"] 
